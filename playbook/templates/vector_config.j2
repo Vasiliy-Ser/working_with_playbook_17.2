@@ -1,0 +1,13 @@
+# vector_config.j2
+[sources.in]
+type = "file"
+include = ["/var/log/*.log"]
+
+[transforms.parse_json]
+type = "json_parser"
+inputs = ["in"]
+
+[sinks.out]
+type = "console"
+inputs = ["parse_json"]
+encoding = "json"

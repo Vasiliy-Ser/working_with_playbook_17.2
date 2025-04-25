@@ -1,0 +1,99 @@
+---
+- name: Install Clickhouse
+  hosts: clickhouse
+  vars:
+    vector_version: "0.36.1"  # example
+    vector_config_dir: "/etc/vector"  
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - name: Get clickhouse distrib (main download)
+      block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        name:
+          - clickhouse-common-static-{{ clickhouse_version }}.rpm
+          - clickhouse-client-{{ clickhouse_version }}.rpm
+          - clickhouse-server-{{ clickhouse_version }}.rpm
+      notify: Start clickhouse service
+    - name: Flush handlers
+      meta: flush_handlers
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc !=82
+      changed_when: create_db.rc == 0
+
+
+# - name: Install and configure Vector
+#   hosts: vector
+#   become: true
+#   handlers:
+#     - name: Restart vector service
+#       ansible.builtin.systemd:d
+#         name: vector
+#         state: restarted
+  tasks:
+    - name: Install Vector prepare architecture name when x64
+      ansible.builtin.set_fact:
+        architecture_name: amd64
+      when: ansible_architecture == 'x86_64'
+    - name: Install Vector prepare architecture name when else
+      ansible.builtin.set_fact:
+        architecture_name: undefined
+      when: ansible_architecture != 'x86_64'
+    - name: Install Vector YUM install
+      become: true
+      ansible.builtin.yum:
+        name: https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.{{ ansible_architecture }}.rpm
+        state: present
+      notify: restart vector service
+    # - name: Install Vector DEB install
+    #     become: true
+    #     ansible.builtin.apt:
+    #       deb: https://packages.timber.io/vector/{{ vector_version }}/vector_{{ vector_version }}-1_{{ architecture_name }}.deb
+    #       state: present
+    #     notify: restart vector service
+    - name: Configure Service Template systemd unit
+      become: true
+      ansible.builtin.template:
+        src: vector.service.j2
+        dest: /etc/systemd/system/vector.service
+        mode: 0644
+      become: true
+      notify: restart vector service
+    - name: Configure Vector ensure what directory exists
+      file:
+        path: "{{ vector_config_dir }}"
+        state: directory
+        mode: 0644
+      become: true
+    - name: Configure Vector Template config
+      ansible.builtin.template:
+        src: vector_config.j2
+        mode: 0644
+        dest: "{{ vector_config_dir }}/vector.yml"
+      become: true
+
+  handlers:
+    - name: restart vector service
+      become: true
+      ansible.builtin.systemd:
+        name: vector.service
+        state: restarted
+        enabled: true
