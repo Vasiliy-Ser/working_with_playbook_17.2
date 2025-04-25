@@ -32,6 +32,7 @@
 
 6. Попробуйте запустить playbook на этом окружении с флагом `--check`.  
 
+Ошибка связана с неверной ссылкой.
 ![answer1](https://github.com/Vasiliy-Ser/working_with_playbook_17.2/blob/61140f9685f084bcdaa34c3ec3995fbbe7df72bf/png/4.png)  
 
 7. Запустите playbook на `prod.yml` окружении с флагом `--diff`. Убедитесь, что изменения на системе произведены.  
